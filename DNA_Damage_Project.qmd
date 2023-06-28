@@ -1,0 +1,1796 @@
+---
+title: "DNA Damage Project"
+author: "Hailey Johnson"
+format: html
+editor: visual
+---
+
+# First: Prep Data
+
+First I am going to isolate only the DFI and COMET values we want to study from the larger data set with all the patient ID's.
+
+```{r, echo = TRUE, eval = FALSE}
+columnsToKeep = c("PATID", "dfi", "comet")
+sementable = sementable[columnsToKeep]
+#select certain columns
+
+sementable = sementable[complete.cases(sementable),]
+#select only the last samples from each patient which data was recorded (NOT NA values)
+
+write.csv(sementable, file = "sementable.csv")
+#now we have our neat data
+```
+
+Now I need to pull the beta values from each of these patients
+
+```{r, echo = TRUE, eval = FALSE}
+library(tidyverse)
+sementable = read_csv("/Users/haileyjohnson/Desktop/DNA_Damage_Project/DATA/sementable.csv")
+
+dnaDamage_patients = pull(sementable, PATID)
+
+dnaDamage_patientsFixed = c()
+for (id in dnaDamage_patients) {
+id = substr(id, 2, 6) 
+dnaDamage_patientsFixed = append(dnaDamage_patientsFixed, paste0("X", id))
+}
+
+dnaDamage_patients = dnaDamage_patientsFixed
+rm(dnaDamage_patientsFixed)
+
+#This code makes the patient ID's match the ID format in the raw files.
+#Now we are going to go through every file and select the patients we want, then add it to a big data frame.. lets start with p1.rds
+
+p1 = readRDS("/Users/haileyjohnson/Desktop/DNA_Damage_Project/RawRDSFiles/p1.rds")
+p1 = as.data.frame(p1)
+col_names = colnames(p1) #now we have all the column names from our      methylation data!
+
+columnsToKeep = c()
+
+for (name in col_names) {
+
+  if (name %in% dnaDamage_patients) {
+    columnsToKeep = append(columnsToKeep, name)
+    }
+
+}
+
+#Now I can select the columns in the data frame I want that have to do with opioids.However since this is the first data we are adding I also want to keep the chromosomes column and mapInfo column.
+  
+columnsToKeep = c("CHR", "MAPINFO", columnsToKeep)
+dnaDamage_data = p1[columnsToKeep]
+
+#Now lets do this to each file we have! Add onto our mega meth data set...
+
+files = c(
+"/Users/haileyjohnson/Desktop/DNA_Damage_Project/RawRDSFiles/p2.rds",
+"/Users/haileyjohnson/Desktop/DNA_Damage_Project/RawRDSFiles/p3.rds",
+"/Users/haileyjohnson/Desktop/DNA_Damage_Project/RawRDSFiles/p4.rds",
+"/Users/haileyjohnson/Desktop/DNA_Damage_Project/RawRDSFiles/p5.rds",
+"/Users/haileyjohnson/Desktop/DNA_Damage_Project/RawRDSFiles/p6.rds",
+"/Users/haileyjohnson/Desktop/DNA_Damage_Project/RawRDSFiles/p7.rds",
+"/Users/haileyjohnson/Desktop/DNA_Damage_Project/RawRDSFiles/p8.rds",
+"/Users/haileyjohnson/Desktop/DNA_Damage_Project/RawRDSFiles/p9.rds",
+"/Users/haileyjohnson/Desktop/DNA_Damage_Project/RawRDSFiles/p10.rds",
+"/Users/haileyjohnson/Desktop/DNA_Damage_Project/RawRDSFiles/p11.rds",
+"/Users/haileyjohnson/Desktop/DNA_Damage_Project/RawRDSFiles/p12.rds",
+"/Users/haileyjohnson/Desktop/DNA_Damage_Project/RawRDSFiles/p13.rds",
+"/Users/haileyjohnson/Desktop/DNA_Damage_Project/RawRDSFiles/p14.rds",
+"/Users/haileyjohnson/Desktop/DNA_Damage_Project/RawRDSFiles/p15.rds",
+"/Users/haileyjohnson/Desktop/DNA_Damage_Project/RawRDSFiles/p16.rds")
+
+for (file in files) { # loop through every file
+  
+  temp_data = readRDS(file)
+  temp_data = as.data.frame(temp_data)
+  col_names = colnames(temp_data) #now we have all the column names from our      methylation data!
+
+  columnsToKeep = c()
+
+  for (name in col_names) {
+
+  if (name %in% dnaDamage_patients) {
+    columnsToKeep = append(columnsToKeep, name)
+    }
+  # Now I can select the columns in the data frame I want that have to do with opioids.
+
+  }
+  
+  temp_data = temp_data[columnsToKeep]
+  
+  dnaDamage_data = cbind(dnaDamage_data, temp_data)
+  
+}
+
+```
+
+Now I'm gonna write this dataset into my directory. This "dnaDamage_data" contains all the beta values for all the patients listed with DNA Damage info.
+
+```{r, echo = TRUE, eval = FALSE}
+write.csv(dnaDamage_data, "dnaDamage_data.csv", row.name = TRUE)
+```
+
+## High and Low 10% of Values
+
+Since I have all those beta values logged in, now I want to play around and look at the top 10 and low 10 percent of the COMET and DFI values
+
+Here's gonna be our code to calculate this...
+
+```{r, echo = TRUE, eval = FALSE}
+DFI = sort(pull(sementable, dfi))
+COMET = sort(pull(sementable, comet))
+
+#This sorts our values smallest to largest, so we can see what our data looks like
+
+print(summary(DFI))
+print(summary(COMET))
+hist(COMET)
+hist(DFI)
+
+# 10% of 1531 is 153, so the first 153 values, then the last 153 values would technically be our low and high ten percent
+
+low_10dfi = log_dfi[c(1:153)]
+high_10dfi = log_dfi[c(1378:1531)]
+
+low_10comet = log_comet[c(1:153)]
+high_10comet = log_comet[c(1378:1531)]
+
+#now lets run a for loop to pick out the patients which had the top 10 and low 10 percent of dfi and comet values... :)
+
+```
+
+We need to pull out those patients with the low 10 and high 10 percent of values... THEN we can do USEQ on them.
+
+```{r, , echo = TRUE, eval = FALSE}
+
+test1 = arrange(sementable, dfi) #I like this better
+low_dfi_values = test1[1:153, c("PATID", "dfi")]
+#selecting columns 1 and 2 because we don't care about comet values right now
+high_dfi_values = test1[1378:1531, c("PATID", "dfi")]
+
+#an we can do the same thing for comet 
+
+test2 = arrange(sementable, log_comet) #I like this better
+low_comet_values = test2[1:153, c("PATID", "log_comet")]
+high_comet_values = test2[1378:1531, c("PATID", "log_comet")]
+
+
+#now we have our high and low PATID's to compare... let's get the beta values for them both
+
+#LOW DFI VALUES
+patients = pull(low_dfi_values, PATID) #ID values from sementable
+col_names = colnames(dnaDamage_data) #ID values from methylation data
+
+patientsFixedNames = c()
+for (id in patients) {
+id = substr(id, 2, 6) 
+patientsFixedNames = append(patientsFixedNames, paste0("X", id))
+}
+
+patients = patientsFixedNames
+rm(patientsFixedNames)
+# above we just needed to format the names so they match each other!
+
+columnsToKeep = c()
+
+for (name in col_names) {
+  if (name %in% patients) {
+    columnsToKeep = append(columnsToKeep, name)
+    }
+  # Now I can select the columns in the data frame I want, but first I have to change the ID's to match the ID's in the methylation dataframe.
+}
+  
+  lowDFIData = dnaDamage_data[columnsToKeep]
+
+#HIGH DFI VALUES
+patients = pull(high_dfi_values, PATID) 
+col_names = colnames(dnaDamage_data)
+
+patientsFixedNames = c()
+for (id in patients) {
+id = substr(id, 2, 6) 
+patientsFixedNames = append(patientsFixedNames, paste0("X", id))
+}
+
+patients = patientsFixedNames
+rm(patientsFixedNames)
+
+columnsToKeep = c()
+for (name in col_names) {
+  if (name %in% patients) {
+    columnsToKeep = append(columnsToKeep, name)
+    }
+}
+  
+  highDFIData = dnaDamage_data[columnsToKeep]
+  
+#LOW COMET VALUES
+patients = pull(low_comet_values, PATID) 
+col_names = colnames(dnaDamage_data)
+
+patientsFixedNames = c()
+for (id in patients) {
+id = substr(id, 2, 6) 
+patientsFixedNames = append(patientsFixedNames, paste0("X", id))
+}
+
+patients = patientsFixedNames
+rm(patientsFixedNames)
+
+columnsToKeep = c()
+for (name in col_names) {
+  if (name %in% patients) {
+    columnsToKeep = append(columnsToKeep, name)
+    }
+}
+  
+  lowCOMETData = dnaDamage_data[columnsToKeep]
+  
+#HIGH COMET VALUES
+patients = pull(high_comet_values, PATID) 
+col_names = colnames(dnaDamage_data)
+
+patientsFixedNames = c()
+for (id in patients) {
+id = substr(id, 2, 6) 
+patientsFixedNames = append(patientsFixedNames, paste0("X", id))
+}
+
+patients = patientsFixedNames
+rm(patientsFixedNames)
+
+columnsToKeep = c()
+for (name in col_names) {
+  if (name %in% patients) {
+    columnsToKeep = append(columnsToKeep, name)
+    }
+}
+  
+  highCOMETData = dnaDamage_data[columnsToKeep]
+```
+
+NOW after we run this code, we can perform USEQ. We have four important dataframes that will be important for this, called...
+
+*lowDFIData*
+
+*highDFIData*
+
+*lowCOMETData*
+
+*highCOMETData*
+
+```{r, echo= TRUE, eval = FALSE}
+
+write.csv(lowDFIData, "lowDFIData.csv", row.names = TRUE)
+write.csv(highDFIData, "highDFIData.csv", row.names = TRUE)
+write.csv(lowCOMETData, "lowCOMETData.csv", row.names = TRUE)
+write.csv(highCOMETData, "highCOMETData.csv", row.names = TRUE)
+
+```
+
+# Second Step: USEQ On Both Groups
+
+Now we can perform USEQ on the low versus high DFI and COMET data! DFI there was 104 patients in the high DFI (treatment) group who had a lot of acknowledged damage, and 150 patients in the low DFI (control) group. Similar numbers for COMET. Using the script Chad created... *python_script.py* and *useq_pipeline_python.sh.* It took literally over 24 hours for USEQ to finish running on COMET and DFI.
+
+Remember to do a regression of methylation and DNA damage later....
+
+ONCE I have those USEQ significant regions done, I want to find the MOST significant differences between the control and treatment groups (for COMET and DFI). And plot them. There are currently thousands, but we need to extract that data, and then isolate the most significant ones, and get p-values. Chad said he took thousands to 27.
+
+#### Here's the TO DO outline:
+
+**Step 1**: make a new column after the ER_Start and ER_Stop columns (insert a new column) and do
+
+=CONCATENATE(*select B2*, "*", select C2 or START, "*\_", *select D2 or STOP*) press enter. It will make a new region name for that column, but if you double click the dot at the bottom right, it should make the new name for the ENTIRE column.
+
+**Step 2**: Select columns B, C, D, and E (chromosome through new region name) and copy and paste that into a .bed file! Already started one for COMET, will need to just copy that and paste into a new one for DFI.
+
+**Step 3**: As we just did that for the forward sliding window, repeat steps 1 and 2 for the REVERSE sliding window.
+
+**Step 4:** Okay, so now you have this .bed file right, now use the script Chad provided (/Users/jenkinslab/Desktop/Jenkins_Lab_Github/Bedtools_Intersect/bedtools_intersect.sh) the bedtools_intersect.sh, and replace the second pathway with your .bed file, and the third pathway with the pathway to a NEW text file (wherever you want it) with whatever name you want. Maybe call them COMETRegionOrganizer?? or anything you want! :) Open that in EXCEL, insert a new row at the top (click on row 1 and insert and make a new row at top), and make headers (I did CHR, START, STOP, CG, and REGION NAME or something)
+
+bedtools intersect -a /Users/jenkinslab/Desktop/FAZSTProject/DNA_Damage_Project/SubsettingCPGs/FindngOverlap/cometOverlapAll.bed -b /Users/jenkinslab/Desktop/FAZSTProject/DNA_Damage_Project/SubsettingCPGs/FindngOverlap/dfiOverlapAll.bed -wb \> /Users/jenkinslab/Desktop/FAZSTProject/DNA_Damage_Project/SubsettingCPGs/ALLOverlap.txt
+
+Now we have all the CpG regions we want... there may be duplicates Chad said. Maybe write some code to only take the unique() ones!
+
+... Follow the example code, see what Chad did.
+
+**Step ?:** Find delta for all the differences in methylation means between the control and treatment (low COMET versus high COMET and same for dfi...) then take the greatest differences. Chad ended up selecting any \>0.8, which is HUGE.
+
+Here I am going to translate what Chad did into R.
+
+# COMET
+
+```{r, echo = TRUE, eval = FALSE}
+gene_info = read.table("/Users/jenkinslab/Desktop/FAZSTProject/DNA_Damage_Project/SubsettingCPGs/COMET/regionorganizerCOMET.txt", header = TRUE)
+COMET_beta_vals = read.csv()
+
+install.packages("Dict")
+library(Dict)
+
+result = c()
+index = c(1:length(rownames(gene_info)))
+print(index)
+count = 0
+
+for (i in index) {
+    key = gene_info[i,5]
+    value = c(gene_info[i,4])
+
+    if (!(key %in% result)) {
+        result[key] = value
+      }
+    else {
+        append(result[key], value)
+    }
+}
+
+print(result)
+
+
+high = read.csv("/Users/jenkinslab/Desktop/FAZSTProject/DNA_Damage_Project/highCOMETData.csv")
+low = read.csv("/Users/jenkinslab/Desktop/FAZSTProject/DNA_Damage_Project/lowCOMETData.csv")
+dna_df=data.frame()
+count = 0
+for (key in result) {
+    count = count + 1
+    beta_key = blood_beta_vals.loc[result[key],:]
+    blood_df[key] = (np.mean(beta_key))
+    print("Finished",count,"/",len(result))
+}
+
+view(dna_df)
+
+```
+
+# Third Step: Regression Analysis
+
+Lets see how comet and dfi correlate with each other...
+
+```{r,echo = TRUE, eval = FALSE}
+library(broom)
+library(tidyverse)
+
+install.packages("ggpubr")
+library(ggpubr)
+
+sementable = read_csv("/Users/haileyjohnson/Desktop/DNA_Damage_Project/DATA/sementable.csv")
+
+lm_result = lm(dfi~comet, data = sementable)
+tidy(lm_result)
+
+ggplot(sementable, aes(x = comet, y =dfi)) +
+  geom_point() +
+  geom_smooth(method=lm) +
+  theme_bw()
+
+
+#Let's only do 100...
+
+patients = pull(sementable, PATID)
+random_patients = sample(patients, 250)
+
+sample_sementable = filter(sementable, PATID %in% random_patients)
+
+lm_result = lm(dfi~comet, data = sample_sementable)
+tidy(lm_result)
+
+ggplot(sample_sementable, aes(x = comet, y = dfi)) +
+  geom_point() +
+  geom_smooth(method=lm) +
+  theme_bw() +
+  theme(panel.grid = element_blank()) +
+  labs(x = "Comet Score", y = "DFI Score", title = "Score Relationship")
+
+
+```
+
+```{r}
+#Let's only do 100...
+
+patients = pull(sementable, PATID)
+random_patients = sample(patients, 160)
+
+sample_sementable = filter(sementable, PATID %in% random_patients)
+
+lm_result = lm(dfi~comet, data = sementable)
+tidy(lm_result)
+
+
+ggplot(sementable, aes(x = comet, y = dfi)) +
+  geom_point() +
+  geom_smooth(method=lm) +
+  stat_regline_equation(label.y = 95, aes(label = ..rr.label..)) +
+  theme_bw() +
+  theme(axis.line = element_line(),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank()) +
+  labs(x = "Comet Score", y = "TUNEL Score", title = "Score Relationship")
+```
+
+It looked like the p-value of their relation was SUPER significant (5.731369e-38), but then i visualized the data and there's just 1531 data points so...
+
+Okay, now we want to see how COMET and DFI correlate with epigenetic age!
+
+(data provided from Tim)...
+
+```{r}
+library(tidyverse)
+semen = read.csv("/Users/jenkinslab/Desktop/FAZSTProject/DNA_Damage_Project/age_sememn_table.csv")
+
+rownames(semen) = semen$Row.names
+
+#First lets look at COMET scores
+library(broom)
+lm_result = lm(semen$GLAD.Adjusted~semen$comet, data = semen)
+tidy(lm_result)
+
+ggplot(semen, aes(x = semen$comet, y = semen$GLAD.Adjusted)) +
+  geom_point() +
+  geom_smooth(method=lm) +
+  labs(x = "COMET Score", y = "GLAD Adjusted")
+  theme_bw()
+
+#Now for DFI
+lm_result = lm(semen$GLAD.Adjusted~semen$dfi, data = semen)
+tidy(lm_result)
+
+ggplot(semen, aes(x = semen$dfi, y = semen$GLAD.Adjusted)) +
+  geom_point() +
+  geom_smooth(method=lm) +
+  labs(x = "DFI Score", y = "GLAD Adjusted")
+  theme_bw()
+  
+#just curious...
+  
+ggplot(semen, aes(x = semen$Age_m, y = semen$GLAD.Adjusted)) +
+  geom_point() +
+  geom_smooth(method=lm) +
+  labs(x = "Age", y = "Predicted Age") +
+  theme_bw()
+```
+
+Beautiful Instability Stuff
+
+```{r}
+library(tidyverse)
+library(data.table)
+
+highcomet = fread("/Users/jenkinslab/Desktop/FAZSTProject/DNA_Damage_Project/Instability/HighComet_Instability_Results.csv")
+lowcomet = fread("/Users/jenkinslab/Desktop/FAZSTProject/DNA_Damage_Project/Instability/LowComet_Instability_Results.csv")
+highdfi = fread("/Users/jenkinslab/Desktop/FAZSTProject/DNA_Damage_Project/Instability/HighDFI_Instability_Results.csv")
+lowdfi = fread("/Users/jenkinslab/Desktop/FAZSTProject/DNA_Damage_Project/Instability/LowDFI_Instability_Results.csv")
+
+sementable = fread("/Users/jenkinslab/Desktop/FAZSTProject/DNA_Damage_Project/sementable.csv")
+sementable = mutate(sementable, Sentrix_ID = sementable$PATIDfixed)
+
+highcomet = merge(highcomet, sementable, by = 'Sentrix_ID')
+lowcomet = merge(lowcomet, sementable, by = 'Sentrix_ID')
+highdfi = merge(highdfi, sementable, by = 'Sentrix_ID')
+lowdfi = merge(lowdfi, sementable, by = 'Sentrix_ID')
+
+comet = rbind(highcomet, lowcomet)
+
+```
+
+```{r}
+
+number = length(highcomet$Sentrix_ID)
+newcolumn = rep("highcomet", number)
+highcomet = mutate(highcomet, score = newcolumn)
+
+number = length(lowcomet$Sentrix_ID)
+newcolumn = rep("lowcomet", number)
+lowcomet = mutate(lowcomet, score = newcolumn)
+
+comet = rbind(highcomet, lowcomet) 
+
+ggplot(comet, aes(x = score, y = log(Total_Variance), fill = score)) +
+  geom_boxplot() +
+  geom_jitter(position = position_jitter(0.01)) +
+  labs(y = "Log of Instability Variance", x = "COMET Score") +
+  theme_gray()
+```
+
+```{r}
+number = length(lowdfi$Sentrix_ID)
+newcolumn = rep("lowDFI", number)
+lowdfi = mutate(lowdfi, score = newcolumn)
+
+number = length(highdfi$Sentrix_ID)
+newcolumn = rep("highDFI", number)
+highdfi = mutate(highdfi, score = newcolumn)
+
+dfi = rbind(highdfi, lowdfi) 
+
+ggplot(dfi, aes(x = score, y = log(Total_Variance), fill = score)) +
+  geom_boxplot() +
+  geom_jitter(position = position_jitter(0.01)) +
+  labs(y = "Log of Instability Variance", x = "DFI Score") +
+  theme_gray()
+```
+
+## Making Violin Plots of Instability!
+
+```{r}
+library(ggplot2)
+library(tidyverse)
+
+#Read in your instability data
+HighComet_Instability_Results = read_csv("/Users/haileyjohnson/Desktop/DNA_Damage_Project/CLEAN_ANALYSES/INSTABILITY/comet/HighComet_Instability_Results.csv")
+LowComet_Instability_Results = read_csv("/Users/haileyjohnson/Desktop/DNA_Damage_Project/CLEAN_ANALYSES/INSTABILITY/comet/LowComet_Instability_Results.csv")
+
+HighDFI_Instability_Results = read_csv("/Users/haileyjohnson/Desktop/DNA_Damage_Project/CLEAN_ANALYSES/INSTABILITY/dfi/HighDFI_Instability_Results.csv")
+LowDFI_Instability_Results = read_csv("/Users/haileyjohnson/Desktop/DNA_Damage_Project/CLEAN_ANALYSES/INSTABILITY/dfi/LowDFI_Instability_Results.csv")
+
+HighComet_Instability_Results = mutate(HighComet_Instability_Results, Score = rep("High", 69))
+LowComet_Instability_Results = mutate(LowComet_Instability_Results, Score = rep("Low", 145))
+
+comet = rbind(HighComet_Instability_Results, LowComet_Instability_Results) %>% mutate(Assay = rep("Comet", 214))
+
+
+#now for DFI!
+HighDFI_Instability_Results = mutate(HighDFI_Instability_Results, Score = rep("High", 90))
+LowDFI_Instability_Results = mutate(LowDFI_Instability_Results, Score = rep("Low", 142))
+
+dfi = rbind(HighDFI_Instability_Results, LowDFI_Instability_Results) %>% mutate(Assay = rep("DFI", 232))
+
+instability = rbind(comet, dfi)
+
+```
+
+```{r}
+ggplot(instability, aes(x=Assay, y=Chaos_Score)) +
+  geom_violin(trim = FALSE) +
+ stat_summary(fun.y=mean, geom="point", size=2, color="blue") 
+```
+
+```{r}
+ggplot(instability, aes(x=Assay, y=Total_Variance, fill=Score)) +
+  geom_violin(trim = FALSE) +
+  scale_fill_manual(values = c("palevioletred", "lightskyblue")) +
+  theme_classic() +
+  theme(legend.position = "top") +
+  labs(x="Assay Type", y="Instability Total Variance")
+```
+
+Now lets do the same thing for DFI
+
+```{r}
+#Read in your instability data
+
+HighDFI_Instability_Results = mutate(HighDFI_Instability_Results, Score = rep("High", 104))
+LowDFI_Instability_Results = mutate(LowDFI_Instability_Results, Score = rep("Low", 150))
+
+dfi = rbind(HighDFI_Instability_Results, LowDFI_Instability_Results)
+
+ggplot(dfi, aes(x=Score, y=Chaos_Score, fill=Score)) +
+  geom_violin(trim = FALSE) +
+  scale_fill_manual(values = c("palevioletred", "lightskyblue")) +
+  theme_classic() +
+  theme(legend.position = "top") +
+  labs(x="DFI Score", y="Chaos Score")
+```
+
+Attempt at making a Circos plot!
+
+First we need to fix our data...
+
+```{r}
+#Import names of all regions with their chromosomes, start and stop, the =n make one big datafile
+
+allCOMETUseqRegions = rbind(useqNames1, useqNames2)
+write.csv(allCOMETUseqRegions, "allCOMETUseqRegions.csv")
+
+#useqnames1 is from the forward analysis and names2 is from the revers
+
+#okay now import the significant differences you want to plot for CIRCOS. Mine is called cometCircosData
+
+colnames(cometCircosData)[1] = "Region_Name"
+circosRegions = pull(cometCircosData, Region_Name)
+
+allRegions = pull(regionNames, Region_Name)
+allChr = pull(regionNames, Chr)
+allStarts = pull(regionNames, ER_Start)
+allStops = pull(regionNames, ER_Stop)
+
+Chromosome = c()
+chromStart = c()
+chromEnd = c()
+for(region in circosRegions) {
+  index = which(allRegions == region)
+  Chromosome = append(Chromosome, allChr[index])
+  chromStart = append(chromStart, allStarts[index])
+  chromEnd  = append(chromEnd, allStops[index])
+}
+
+cometCircosData = cometCircosData %>% mutate(Chromosome = Chromosome) %>% mutate(chromStart = chromStart) %>% mutate(chromEnd = chromEnd)
+
+write.csv(cometCircosData, "cometCircosData.csv")
+```
+
+```{r}
+#Import names of all regions with their chromosomes, start and stop, the =n make one big datafile
+
+regionNames = rbind(useqNames1, useqNames2)
+
+allDFIUseqRegions = rbind(useqNames1, useqNames2)
+write.csv(allDFIUseqRegions, "allDFIUseqRegions.csv")
+
+#useqnames1 is from the forward analysis and names2 is from the revers
+
+#okay now import the significant differences you want to plot for CIRCOS. Mine is called cometCircosData
+
+colnames(DFI_DMR_Regions)[1] = "Region_Name"
+DFIRegions = pull(DFI_DMR_Regions, Region_Name)
+
+allRegions = pull(regionNames, Region)
+allChr = pull(regionNames, Chr)
+allStarts = pull(regionNames, ER_Start)
+allStops = pull(regionNames, ER_Stop)
+
+Chromosome = c()
+chromStart = c()
+chromEnd = c()
+for(region in DFIRegions) {
+  index = which(allRegions == region)
+  Chromosome = append(Chromosome, allChr[index])
+  chromStart = append(chromStart, allStarts[index])
+  chromEnd  = append(chromEnd, allStops[index])
+}
+
+DFIData = DFI_DMR_Regions %>% mutate(Chromosome = Chromosome) %>% mutate(chromStart = chromStart) %>% mutate(chromEnd = chromEnd)
+
+write.csv(DFIData, "dfiOverlap.csv")
+
+```
+
+Okay lets try Circos
+
+```{r}
+chr.exclude <- NULL
+cyto.info <- cometCircosData
+tracks.inside <- 43;
+tracks.outside <- 0;
+
+RCircos.Set.Core.Components(cyto.info, chr.exclude,tracks.inside, tracks.outside)
+
+```
+
+The SetUp says I need a stain and Band information?
+
+```{r}
+RCircos.Area.Plot(cometCircosData, track.num = 43, side = out)
+```
+
+Okay we are giving up on a circos plot for now...
+
+## Classic Regression of DFI and Comet Scores and Beta Values
+
+Okay, so we have over 1000 patients with recorded DFI and COMET values... I'm surely not going to graph all that. So lets pick... a hundred?
+
+```{r}
+#Make sure sementable is loaded into an R object.
+library(tidyverse)
+
+#load in sementable
+patients = pull(sementable, PATIDfixed)
+patients = sample(patients, 100)
+
+p1 = readRDS("/Users/jenkinslab/Desktop/FAZSTProject/RawRDSFiles/p1.rds")
+p1 = as.data.frame(p1)
+col_names = colnames(p1) #now we have all the column names from our      methylation data!
+columnsToKeep = c()
+for (name in col_names) {
+  if (name %in% patients) {
+    columnsToKeep = append(columnsToKeep, name)
+    }
+}
+#Now I can select the columns in the data frame I want that have to do with opioids.However since this is the first data we are adding I also want to keep the chromosomes column and mapInfo column.
+columnsToKeep = c("CHR", "MAPINFO", columnsToKeep)
+dnaDamage_data = p1[columnsToKeep]
+#Now lets do this to each file we have! Add onto our mega meth data set...
+files = c(
+"/Users/jenkinslab/Desktop/FAZSTProject/RawRDSFiles/p2.rds",
+"/Users/jenkinslab/Desktop/FAZSTProject/RawRDSFiles/p3.rds",
+"/Users/jenkinslab/Desktop/FAZSTProject/RawRDSFiles/p4.rds",
+"/Users/jenkinslab/Desktop/FAZSTProject/RawRDSFiles/p5.rds",
+"/Users/jenkinslab/Desktop/FAZSTProject/RawRDSFiles/p6.rds",
+"/Users/jenkinslab/Desktop/FAZSTProject/RawRDSFiles/p7.rds",
+"/Users/jenkinslab/Desktop/FAZSTProject/RawRDSFiles/p8.rds",
+"/Users/jenkinslab/Desktop/FAZSTProject/RawRDSFiles/p9.rds",
+"/Users/jenkinslab/Desktop/FAZSTProject/RawRDSFiles/p10.rds",
+"/Users/jenkinslab/Desktop/FAZSTProject/RawRDSFiles/p11.rds",
+"/Users/jenkinslab/Desktop/FAZSTProject/RawRDSFiles/p12.rds",
+"/Users/jenkinslab/Desktop/FAZSTProject/RawRDSFiles/p13.rds",
+"/Users/jenkinslab/Desktop/FAZSTProject/RawRDSFiles/p14.rds",
+"/Users/jenkinslab/Desktop/FAZSTProject/RawRDSFiles/p15.rds",
+"/Users/jenkinslab/Desktop/FAZSTProject/RawRDSFiles/p16.rds")
+for (file in files) { # loop through every file
+  temp_data = readRDS(file)
+  temp_data = as.data.frame(temp_data)
+  col_names = colnames(temp_data) #now we have all the column names from our      methylation data!
+  columnsToKeep = c()
+  for (name in col_names) {
+  if (name %in% patients) {
+    columnsToKeep = append(columnsToKeep, name)
+    }
+  # Now I can select the columns in the data frame I want that have to do with opioids.
+  }
+  temp_data = temp_data[columnsToKeep]
+  dnaDamage_data = cbind(dnaDamage_data, temp_data)
+}
+
+```
+
+Now that we have all the methylation data, time to find the means and just plot that and see what it looks like...
+
+```{r}
+dnaDamage_data = dnaDamage_data[ , 3:100] #only do once to remove map info and chromosomes
+
+patients = colnames(dnaDamage_data)
+means = c()
+
+for (id in patients) {
+  mean = mean(pull(dnaDamage_data, id))
+  means = append(means, mean)
+}
+
+data = tibble("PATIDfixed" = patients, "Global_Methylation" = means)
+
+data = merge(sementable, data, by = "PATIDfixed")
+```
+
+```{r}
+ggplot(data, aes(x=comet, y=Global_Methylation)) +
+  geom_point()
+```
+
+HM. Well actually that literally shows nothing because it is global methylation.
+
+lets pick a ***specific CG*** site that showed a big difference in methylation. Take this form my DMR analysis...
+
+```{r}
+#For DFI, I have selected the cg site that showd the most significant difference in methylation. here it is listed below (cg21798136)
+dnaDamage_data = dnaDamage_data[ , 3:95] #only do once to remove map info and chromosomes
+dnaDamage_data = dnaDamage_data["cg21798136", ]
+
+patients = colnames(dnaDamage_data)
+betas = c()
+
+for (id in patients) {
+  betas = append(betas, pull(dnaDamage_data, id))
+}
+
+data = tibble("PATIDfixed" = patients, "Methylation" = betas)
+
+data = merge(sementable, data, by = "PATIDfixed")
+
+#Now we have a data frame with all the beta values we want to plot AGAINST the DFI scores!! yaayayyayayayaya
+
+ggplot(data, aes(x=dfi, y =Methylation)) +
+  geom_point()+
+  geom_smooth(method=lm) +
+  labs(x = "DFI Score", y = "Beta Value") +
+  theme_bw()
+```
+
+```{r}
+comet = rbind(HighComet_Instability_Results, LowComet_Instability_Results)
+comet = mutate(comet, "PATIDfixed"= Sentrix_ID)
+
+comet = merge(sementable, comet, by="PATIDfixed")
+
+ggplot(comet, aes(x=comet, y=Total_Variance)) +
+  geom_point()
+```
+
+Trying to do circos part 2
+
+Translating the data code.... We need to input the chromosome, and my own start and stop... Luckily when I was first attempting circos I already went through the pain of formatting my data as can be seen if you scroll up a bit lol...(cometCircosData and dfiOverlap CSV files I wrote)
+
+```{r}
+cometCircosData <- read_csv("cometCircosData.csv")
+dfiOverlap <- read_csv("SubsettingCPGs/DFI/dfiOverlap.csv")
+
+#First, lets make a circos plot for the COMET significant DMRs
+
+#fix chromosme names
+
+library(tidyverse)
+library(stringr)
+chromosomes = pull(cometCircosData, Chromosome)
+new_chrom = c()
+
+for (x in chromosomes) {
+  l = str_length(x)
+  new_chrom = append(new_chrom, substring(x, 4, l))
+}
+
+cometCircosData = mutate(cometCircosData, newChrom = new_chrom)
+
+cometCircosData <- read_csv("cometCircosData.csv")
+dfiOverlap <- read_csv("SubsettingCPGs/DFI/dfiOverlap.csv")
+
+chromosomes <- cometCircosData$newChrom
+startvalue <- cometCircosData$chromStart
+endvalue <- cometCircosData$chromEnd
+delta <- cometCircosData$Delta
+
+endvalue = endvalue + 1000000
+delta = delta + 1000
+chromosomes = as.numeric(chromosomes)
+
+library(BioCircos)
+
+
+tracks = BioCircosBarTrack("bartrack", chromosomes= chromosomes, starts= startvalue, ends= endvalue, values = delta, maxRadius = 0.9, minRadius = 0.7, color = "orange")
+
+tracks = tracks + BioCircosBackgroundTrack("bars_background", maxRadius = 0.9, minRadius = 0.7, colors = "#2222EE")
+
+tracks = tracks + BioCircosTextTrack("testText", 'Differentially Methylated Regions', weight = "lighter",x = - .98, y = - 1.34)
+
+BioCircos(tracks, genomeFillColor = "Spectral", chrPad = 0.02, displayGenomeBorder = FALSE, yChr =  FALSE, genomeTicksDisplay = FALSE,  genomeLabelTextSize = 15)
+
+
+
+png(filename = "goodstuff.png")
+BioCircos(tracks, genomeFillColor = "Spectral", chrPad = 0.02, displayGenomeBorder = FALSE, yChr =  FALSE, genomeTicksDisplay = FALSE,  genomeLabelTextSize = 15)
+```
+
+# Accounting for samples contaminated with somatic cells...
+
+Around a THIRd of the samples in the high comet data were likely contaminated with somatic cells.
+
+```{r}
+#first lets load in the dataset telling us which ID's were contaminated
+
+Contamination_Dataframe <- read_csv("/Users/jenkinslab/Desktop/FAZSTProject/DNA_Damage_Project/somaticTest/Comet/highCOMET/Reports/Contamination_Dataframe.csv")
+
+#determine which were NOT contaminated
+
+clean = which(Contamination_Dataframe$Contamination_Call == "Likely NOT Contaminated with Somatic Cells")
+clean = Contamination_Dataframe$Sample_ID[clean]
+
+#and select those that were clean
+cleanHighComet <- read_csv("/Users/jenkinslab/Desktop/FAZSTProject/DNA_Damage_Project/highCOMETData.csv")
+
+x = "cgSite"
+clean = append(x, clean)
+cleanHighComet= cleanHighComet[clean]
+
+write.csv(cleanHighComet, "/Users/jenkinslab/Desktop/FAZSTProject/DNA_Damage_Project/somaticTest/Comet/cleanHighComet.csv", row.names = TRUE)
+
+
+
+
+#now do it for lowComet
+Contamination_Dataframe <- read_csv("/Users/jenkinslab/Desktop/FAZSTProject/DNA_Damage_Project/somaticTest/Comet/lowCOMET/Reports/Contamination_Dataframe.csv")
+
+clean = which(Contamination_Dataframe$Contamination_Call == "Likely NOT Contaminated with Somatic Cells")
+clean = Contamination_Dataframe$Sample_ID[clean]
+
+#and select those that were clean
+library(data.table)
+cleanLowComet <- fread("/Users/jenkinslab/Desktop/FAZSTProject/DNA_Damage_Project/lowCOMETData.csv")
+cleanLowComet = as.data.frame(cleanLowComet)
+colnames(cleanLowComet)[1] = "cgSite"
+
+x = "cgSite"
+clean = append(x, clean)
+cleanLowComet= cleanLowComet[clean]
+
+colnames(cleanLowComet)[1] = ""
+cleanLowComet = cleanLowComet[-1]
+
+rownames(cleanLowComet) = cleanLowComet$cgSite
+
+write.csv(cleanLowComet, "/Users/jenkinslab/Desktop/FAZSTProject/DNA_Damage_Project/somaticTest/Comet/cleanLowComet.csv", row.names = TRUE)
+
+
+rownames(cleanHighComet) = cleanHighComet$cgSite
+cleanHighComet = cleanHighComet[-1]
+cleanHighComet = as.data.frame(cleanHighComet)
+
+```
+
+Time to run USEQ all over again...
+
+Clean up DFI
+
+```{r}
+library(readr)
+Contamination_Dataframe <- read_csv("/Users/jenkinslab/Desktop/FAZSTProject/DNA_Damage_Project/somaticTest/DFI/highDFI/Reports/Contamination_Dataframe.csv")
+
+#determine which were NOT contaminated
+
+clean = which(Contamination_Dataframe$Contamination_Call == "Likely NOT Contaminated with Somatic Cells")
+clean = Contamination_Dataframe$Sample_ID[clean]
+
+#and select those that were clean
+#cleanHighDFI <- read_csv("//Users/jenkinslab/Desktop/FAZSTProject/DNA_Damage_Project/highDFIData.csv")
+library(data.table)
+cleanHighDFI = fread("/Users/jenkinslab/Desktop/FAZSTProject/DNA_Damage_Project/highDFIData.csv")
+colnames(cleanHighDFI)[1] = "cgSite"
+x = "cgSite"
+clean = append(x, clean)
+
+cleanHighDFI = as.data.frame(cleanHighDFI)
+cleanHighDFI= cleanHighDFI[clean]
+
+rownames(cleanHighDFI) = cleanHighDFI$cgSite
+cleanHighDFI = cleanHighDFI[-1]
+
+write.csv(cleanHighDFI, "/Users/jenkinslab/Desktop/FAZSTProject/DNA_Damage_Project/somaticTest/DFI/cleanHighDFI.csv", row.names = TRUE)
+
+
+
+
+#now do it for lowComet
+library(tidyverse)
+Contamination_Dataframe <- read_csv("/Users/jenkinslab/Desktop/FAZSTProject/DNA_Damage_Project/somaticTest/DFI/lowDFI/Reports/Contamination_Dataframe.csv")
+
+#determine which were NOT contaminated
+
+clean = which(Contamination_Dataframe$Contamination_Call == "Likely NOT Contaminated with Somatic Cells")
+clean = Contamination_Dataframe$Sample_ID[clean]
+
+#and select those that were clean
+#cleanHighDFI <- read_csv("//Users/jenkinslab/Desktop/FAZSTProject/DNA_Damage_Project/highDFIData.csv")
+library(data.table)
+cleanLowDFI = fread("/Users/jenkinslab/Desktop/FAZSTProject/DNA_Damage_Project/lowDFIData.csv")
+colnames(cleanLowDFI)[1] = "cgSite"
+x = "cgSite"
+clean = append(x, clean)
+
+cleanLowDFI = as.data.frame(cleanLowDFI)
+cleanLowDFI= cleanLowDFI[clean]
+
+rownames(cleanLowDFI) = cleanLowDFI$cgSite
+cleanLowDFI = cleanLowDFI[-1]
+
+write.csv(cleanLowDFI, "/Users/jenkinslab/Desktop/FAZSTProject/DNA_Damage_Project/somaticTest/DFI/cleanLowDFI.csv", row.names = TRUE)
+```
+
+\
+\# This is the last run I didbedtools intersect -a /Users/jenkinslab/Desktop/FAZSTProject/DNA_Damage_Project/CLEAN_ANALYSES/Comet/COMET.bed -b /Users/jenkinslab/Desktop/FAZSTProject/DNA_Damage_Project/CLEAN_ANALYSES/DFI/DFI.bed -wb \> /Users/jenkinslab/Desktop/FAZSTProject/DNA_Damage_Project/CLEAN_ANALYSES/USEQ_Overlap/overlap.txt
+
+## Make side by side boxplots of DMR's!
+
+```{r}
+library(tidyverse)
+
+highcomet = read_csv("/Users/jenkinslab/Desktop/FAZSTProject/DNA_Damage_Project/CLEAN_ANALYSES/Comet/cleanHighComet.csv")
+
+library(data.table)
+
+lowcomet = fread("/Users/jenkinslab/Desktop/FAZSTProject/DNA_Damage_Project/CLEAN_ANALYSES/Comet/cleanLowComet.csv")
+lowcomet = as_tibble(lowcomet)
+
+rownames(highcomet) = highcomet$...1
+rownames(lowcomet) = lowcomet$V1
+
+Region1 = c("cg23697633")
+Region2 = c("cg26180843", "cg01497892", "cg08071329", "cg24651908", "cg04386759", "cg11258132", "cg00893488", "cg04972894", "cg24150532")
+Region3 = c("cg24004951")
+Region4 = c("cg21211680", "cg15059367", "cg07969121")
+Region5 = c("cg22063222")
+Region6 = c("cg17744375", "cg17739302", "cg14791502", "cg25711963", "cg23797551", "cg05538161", "cg10741603", "cg10858640", "cg11535255")
+
+regions = c(Region1, Region2, Region3, Region4, Region5, Region6)
+
+
+Region = c()
+BetaValue = c()
+ScoreType = c()
+
+dataCols = colnames(highcomet)
+dataRows = rownames(highcomet)
+
+for (regionName in regions) {
+    for (sample in colnames(highcomet)[-1]) {
+      Region = c(Region, regionName)
+      ScoreType = append(ScoreType, "High")
+      BetaValue = append(BetaValue, highcomet[which(dataRows == regionName), which(dataCols == sample)])
+    }
+}
+
+rownames(lowcomet) = lowcomet$V1
+dataCols = colnames(lowcomet)
+dataRows = rownames(lowcomet)
+
+for (regionName in regions) {
+    for (sample in colnames(lowcomet)[-1]) {
+      Region = c(Region, regionName)
+      ScoreType = append(ScoreType, "Low")
+      BetaValue = append(BetaValue, lowcomet[which(dataRows == regionName), which(dataCols == sample)])
+    }
+}
+
+#too lazy to write more complex code so... lets do some busy work
+new = c()
+
+for (thingy in Region) {
+  if (thingy %in% Region1) {
+    new = append(new, "Region1")
+  } else if (thingy %in% Region2) {
+    new = append(new, "Region2")
+  } else if (thingy %in% Region3) {
+    new = append(new, "Region3")
+  } else if (thingy %in% Region4) {
+    new = append(new, "Region4")
+  } else if (thingy %in% Region5) {
+    new = append(new, "Region5")
+  } else if (thingy %in% Region6) {
+    new = append(new, "Region6")
+  }
+}
+
+Region = new
+#time to put it all together!!!!
+
+x = unlist(BetaValue)
+
+cometDMRs = tibble(Regions = Region, meth = x, ScoreType)
+
+
+ggplot(cometDMRs, aes(x=Regions, y=meth, fill = ScoreType)) +
+  geom_boxplot() +
+  scale_fill_manual(values = c("palevioletred", "lightskyblue")) +
+  theme_classic() +
+  theme(legend.position = "top") +
+  labs(x="Differentially Methylated Region", y="Beta Value", title = "Comet- Differentially Methylated Regions")
+
+
+
+#mybe make a dictionary... if cg site is in key's values, then append region to a list, beta value to a list, and score type to  list...
+
+```
+
+```{r}
+
+install.packages("tidyverse")
+library(tidyverse)
+
+highdfi = read_csv("/Users/haileyjohnson/Desktop/DNA_Damage_Project/DATA/cleanHighDFI.csv")
+
+library(data.table)
+
+lowdfi = fread("/Users/haileyjohnson/Desktop/DNA_Damage_Project/DATA/cleanLowDFI.csv")
+lowdfi = as_tibble(lowdfi)
+
+rownames(highdfi) = highdfi$...1
+rownames(lowdfi) = lowdfi$V1
+
+Region1 = c("cg27525020", "cg26900686", "cg16383503")
+Region2 = c("cg05543909", "cg01229752", "cg02246055", "cg08512490", "cg08961664", "cg09761690", "cg16630989", "cg04814450")
+Region3 = c("cg09663145", "cg15888463", "cg08826919", "cg01879591", "cg20043244", "cg06886827", "cg14912375")
+Region4 = c("cg27113379", "cg12792069", "cg10335018", "cg13642237")
+Region5 = c( "cg04860238","cg03369409", "cg17064870", "cg19688203", "cg19474725", "cg27022326", "cg14225665")
+
+regions = c(Region1, Region2, Region3, Region4, Region5)
+
+Region = c()
+BetaValue = c()
+ScoreType = c()
+
+dataCols = colnames(highdfi)
+dataRows = rownames(highdfi)
+
+for (regionName in regions) {
+    for (sample in colnames(highdfi)[-1]) {
+      Region = c(Region, regionName)
+      ScoreType = append(ScoreType, "High")
+      BetaValue = append(BetaValue, highdfi[which(dataRows == regionName), which(dataCols == sample)])
+    }
+}
+
+dataCols = colnames(lowdfi)
+dataRows = rownames(lowdfi)
+
+for (regionName in regions) {
+    for (sample in colnames(lowdfi)[-1]) {
+      Region = c(Region, regionName)
+      ScoreType = append(ScoreType, "Low")
+      BetaValue = append(BetaValue, lowdfi[which(dataRows == regionName), which(dataCols == sample)])
+    }
+}
+
+#too lazy to write more complex code so... lets do some busy work
+new = c()
+
+for (thingy in Region) {
+  if (thingy %in% Region1) {
+    new = append(new, "Region1")
+  } else if (thingy %in% Region2) {
+    new = append(new, "Region2")
+  } else if (thingy %in% Region3) {
+    new = append(new, "Region3")
+  } else if (thingy %in% Region4) {
+    new = append(new, "Region4")
+  } else if (thingy %in% Region5) {
+    new = append(new, "Region5")
+  }
+}
+
+Region = new
+#time to put it all together!!!!
+
+x = unlist(BetaValue)
+
+dfiDMRs = tibble(Regions = Region, meth = x, ScoreType)
+
+
+ggplot(dfiDMRs, aes(x=Regions, y=meth, fill = ScoreType)) +
+  geom_boxplot() +
+  scale_fill_manual(values = c("palevioletred", "lightskyblue")) +
+  theme_classic() +
+  theme(legend.position = "top") +
+  labs(x="Differentially Methylated Region", y="Beta Value", title = "TUNEL- Differentially Methylated Regions")
+
+
+```
+
+REGRESSION of beta values and DMR's
+
+ggplot(data, aes(x=comet, y=BetaValue)) +
+
+geom_point() +
+
+theme_bw() +
+
+labs(y = "Region 1 Beta Value")
+
+#REGION 2
+
+PatID = c()
+
+BetaValue = c()
+
+dataCols = colnames(highcomet)
+
+dataRows = rownames(highcomet)
+
+for (cgSite in Region2) {
+
+for (sample in colnames(highcomet)\[-1\]) {
+
+PatID = c(PatID, sample)
+
+BetaValue = append(BetaValue, highcomet\[which(dataRows == cgSite), which(dataCols == sample)\])
+
+}
+
+}
+
+dataCols = colnames(lowcomet)
+
+dataRows = rownames(lowcomet)
+
+for (cgSite in Region2) {
+
+for (sample in colnames(lowcomet)\[-1\]) {
+
+PatID = c(PatID, sample)
+
+BetaValue = append(BetaValue, lowcomet\[which(dataRows == cgSite), which(dataCols == sample)\])
+
+}
+
+}
+
+BetaValue = unlist(BetaValue)
+
+Region2Data = tibble(BetaValue)
+
+rownames(Region2Data) = PatID
+
+Region2Data = mutate(Region2Data, PATIDfixed = PatID)
+
+data = merge(Region2Data, sementable, by = "PATIDfixed")
+
+ggplot(data, aes(x=comet, y=BetaValue)) +
+
+geom_point() +
+
+theme_bw() +
+
+labs(y = "Region 2 Beta Value")
+
+```{r}
+
+library(tidyverse)
+
+sementable = read_csv("/Users/haileyjohnson/Desktop/DNA_Damage_Project/DATA/sementable.csv")
+
+highcomet = read_csv("/Users/haileyjohnson/Desktop/DNA_Damage_Project/DATA/cleanHighComet.csv")
+
+library(data.table)
+
+lowcomet = fread("/Users/haileyjohnson/Desktop/DNA_Damage_Project/DATA/cleanLowComet.csv")
+lowcomet = as_tibble(lowcomet)
+
+rownames(highcomet) = highcomet$...1
+rownames(lowcomet) = lowcomet$V1
+
+
+Region1 = c("cg23697633")
+Region2 = c("cg26180843", "cg01497892", "cg08071329", "cg24651908", "cg04386759", "cg11258132", "cg00893488", "cg04972894", "cg24150532")
+Region3 = c("cg24004951")
+Region4 = c("cg21211680", "cg15059367", "cg07969121")
+Region5 = c("cg22063222")
+Region6 = c("cg17744375", "cg17739302", "cg14791502", "cg25711963", "cg23797551", "cg05538161", "cg10741603", "cg10858640", "cg11535255")
+
+PatID = c()
+BetaValue = c()
+
+dataCols = colnames(highcomet)
+dataRows = rownames(highcomet)
+
+for (cgSite in Region1) {
+    for (sample in colnames(highcomet)[-1]) {
+      PatID = c(PatID, sample)
+      BetaValue = append(BetaValue, highcomet[which(dataRows == cgSite), which(dataCols == sample)])
+    }
+}
+
+dataCols = colnames(lowcomet)
+dataRows = rownames(lowcomet)
+for (cgSite in Region1) {
+    for (sample in colnames(lowcomet)[-1]) {
+      PatID = c(PatID, sample)
+      BetaValue = append(BetaValue, lowcomet[which(dataRows == cgSite), which(dataCols == sample)])
+    }
+}
+
+BetaValue = unlist(BetaValue)
+
+Region1Data = tibble(BetaValue)
+rownames(Region1Data) = PatID
+Region1Data = mutate(Region1Data, PATIDfixed = PatID)
+
+data = merge(Region1Data, sementable, by = "PATIDfixed")
+
+ggplot(data, aes(x=comet, y=BetaValue)) +
+  geom_point() +
+  theme_bw() +
+  labs(y = "Region 1 Beta Value")
+
+```
+
+```{r}
+#REGION 2
+PatID = c()
+BetaValue = c()
+
+dataCols = colnames(highcomet)
+dataRows = rownames(highcomet)
+
+for (cgSite in Region2) {
+    for (sample in colnames(highcomet)[-1]) {
+      PatID = c(PatID, sample)
+      BetaValue = append(BetaValue, highcomet[which(dataRows == cgSite), which(dataCols == sample)])
+    }
+}
+
+dataCols = colnames(lowcomet)
+dataRows = rownames(lowcomet)
+
+for (cgSite in Region2) {
+    for (sample in colnames(lowcomet)[-1]) {
+      PatID = c(PatID, sample)
+      BetaValue = append(BetaValue, lowcomet[which(dataRows == cgSite), which(dataCols == sample)])
+    }
+}
+
+BetaValue = unlist(BetaValue)
+
+Region2Data = tibble(BetaValue)
+#rownames(Region2Data) = PatID
+Region2Data = mutate(Region2Data, PATIDfixed = PatID)
+
+data = merge(Region2Data, sementable, by = "PATIDfixed")
+
+ggplot(data, aes(x=comet, y=BetaValue)) +
+  geom_point() +
+  theme_bw() +
+  labs(y = "Region 2 Beta Value")
+
+```
+
+```{r}
+#REGION 3
+PatID = c()
+BetaValue = c()
+
+dataCols = colnames(highcomet)
+dataRows = rownames(highcomet)
+
+for (cgSite in Region3) {
+    for (sample in colnames(highcomet)[-1]) {
+      PatID = c(PatID, sample)
+      BetaValue = append(BetaValue, highcomet[which(dataRows == cgSite), which(dataCols == sample)])
+    }
+}
+
+dataCols = colnames(lowcomet)
+dataRows = rownames(lowcomet)
+
+for (cgSite in Region3) {
+    for (sample in colnames(lowcomet)[-1]) {
+      PatID = c(PatID, sample)
+      BetaValue = append(BetaValue, lowcomet[which(dataRows == cgSite), which(dataCols == sample)])
+    }
+}
+
+BetaValue = unlist(BetaValue)
+
+Region3Data = tibble(BetaValue)
+rownames(Region3Data) = PatID
+Region3Data = mutate(Region3Data, PATIDfixed = PatID)
+
+data = merge(Region3Data, sementable, by = "PATIDfixed")
+
+ggplot(data, aes(x=comet, y=BetaValue)) +
+  geom_point() +
+  theme_bw() +
+  labs(y = "Region 3 Beta Value")
+
+
+```
+
+```{r}
+#REGION 4
+PatID = c()
+BetaValue = c()
+
+dataCols = colnames(highcomet)
+dataRows = rownames(highcomet)
+
+for (cgSite in Region4) {
+    for (sample in colnames(highcomet)[-1]) {
+      PatID = c(PatID, sample)
+      BetaValue = append(BetaValue, highcomet[which(dataRows == cgSite), which(dataCols == sample)])
+    }
+}
+
+dataCols = colnames(lowcomet)
+dataRows = rownames(lowcomet)
+
+for (cgSite in Region4) {
+    for (sample in colnames(lowcomet)[-1]) {
+      PatID = c(PatID, sample)
+      BetaValue = append(BetaValue, lowcomet[which(dataRows == cgSite), which(dataCols == sample)])
+    }
+}
+
+BetaValue = unlist(BetaValue)
+
+Region4Data = tibble(BetaValue)
+Region4Data = mutate(Region4Data, PATIDfixed = PatID)
+
+data = merge(Region4Data, sementable, by = "PATIDfixed")
+
+ggplot(data, aes(x=comet, y=BetaValue)) +
+  geom_point() +
+  theme_bw() +
+  labs(y = "Region 4 Beta Value")
+
+```
+
+```{r}
+#REGION 5
+PatID = c()
+BetaValue = c()
+
+dataCols = colnames(highcomet)
+dataRows = rownames(highcomet)
+
+for (cgSite in Region5) {
+    for (sample in colnames(highcomet)[-1]) {
+      PatID = c(PatID, sample)
+      BetaValue = append(BetaValue, highcomet[which(dataRows == cgSite), which(dataCols == sample)])
+    }
+}
+
+dataCols = colnames(lowcomet)
+dataRows = rownames(lowcomet)
+
+for (cgSite in Region5) {
+    for (sample in colnames(lowcomet)[-1]) {
+      PatID = c(PatID, sample)
+      BetaValue = append(BetaValue, lowcomet[which(dataRows == cgSite), which(dataCols == sample)])
+    }
+}
+
+BetaValue = unlist(BetaValue)
+
+Region5Data = tibble(BetaValue)
+Region5Data = mutate(Region5Data, PATIDfixed = PatID)
+
+data = merge(Region5Data, sementable, by = "PATIDfixed")
+
+ggplot(data, aes(x=comet, y=BetaValue)) +
+  geom_point() +
+  theme_bw() +
+  labs(y = "Region 5 Beta Value")
+
+```
+
+```{r}
+#REGION 6
+PatID = c()
+BetaValue = c()
+
+dataCols = colnames(highcomet)
+dataRows = rownames(highcomet)
+
+for (cgSite in Region6) {
+    for (sample in colnames(highcomet)[-1]) {
+      PatID = c(PatID, sample)
+      BetaValue = append(BetaValue, highcomet[which(dataRows == cgSite), which(dataCols == sample)])
+    }
+}
+
+dataCols = colnames(lowcomet)
+dataRows = rownames(lowcomet)
+
+for (cgSite in Region6) {
+    for (sample in colnames(lowcomet)[-1]) {
+      PatID = c(PatID, sample)
+      BetaValue = append(BetaValue, lowcomet[which(dataRows == cgSite), which(dataCols == sample)])
+    }
+}
+
+BetaValue = unlist(BetaValue)
+
+Region6Data = tibble(BetaValue)
+Region6Data = mutate(Region6Data, PATIDfixed = PatID)
+
+data = merge(Region6Data, sementable, by = "PATIDfixed")
+
+ggplot(data, aes(x=comet, y=BetaValue)) +
+  geom_point() +
+  theme_bw() +
+  labs(y = "Region 6 Beta Value")
+
+```
+
+DFI TIME\
+
+```{r}
+install.packages("tidyverse")
+library(tidyverse)
+
+highdfi = read_csv("/Users/haileyjohnson/Desktop/DNA_Damage_Project/DATA/cleanHighDFI.csv")
+
+library(data.table)
+
+lowdfi = fread("/Users/haileyjohnson/Desktop/DNA_Damage_Project/DATA/cleanLowDFI.csv")
+lowdfi = as_tibble(lowdfi)
+
+rownames(highdfi) = highdfi$...1
+rownames(lowdfi) = lowdfi$V1
+
+Region1 = c("cg27525020", "cg26900686", "cg16383503")
+Region2 = c("cg05543909", "cg01229752", "cg02246055", "cg08512490", "cg08961664", "cg09761690", "cg16630989", "cg04814450")
+Region3 = c("cg09663145", "cg15888463", "cg08826919", "cg01879591", "cg20043244", "cg06886827", "cg14912375")
+Region4 = c("cg27113379", "cg12792069", "cg10335018", "cg13642237")
+Region5 = c( "cg04860238","cg03369409", "cg17064870", "cg19688203", "cg19474725", "cg27022326", "cg14225665")
+
+#REGION 1
+PatID = c()
+BetaValue = c()
+
+dataCols = colnames(highdfi)
+dataRows = rownames(highdfi)
+
+for (cgSite in Region1) {
+    for (sample in colnames(highdfi)[-1]) {
+      PatID = c(PatID, sample)
+      BetaValue = append(BetaValue, highdfi[which(dataRows == cgSite), which(dataCols == sample)])
+    }
+}
+
+dataCols = colnames(lowdfi)
+dataRows = rownames(lowdfi)
+
+for (cgSite in Region1) {
+    for (sample in colnames(lowdfi)[-1]) {
+      PatID = c(PatID, sample)
+      BetaValue = append(BetaValue, lowdfi[which(dataRows == cgSite), which(dataCols == sample)])
+    }
+}
+
+BetaValue = unlist(BetaValue)
+
+Region1Data = tibble(BetaValue)
+Region1Data = mutate(Region1Data, PATIDfixed = PatID)
+
+data = merge(Region1Data, sementable, by = "PATIDfixed")
+
+ggplot(data, aes(x=dfi, y=BetaValue)) +
+  geom_point() +
+  theme_bw() +
+  labs(y = "Region 1 Beta Value")
+
+
+```
+
+```{r}
+#REGION 2
+PatID = c()
+BetaValue = c()
+
+dataCols = colnames(highdfi)
+dataRows = rownames(highdfi)
+
+for (cgSite in Region2) {
+    for (sample in colnames(highdfi)[-1]) {
+      PatID = c(PatID, sample)
+      BetaValue = append(BetaValue, highdfi[which(dataRows == cgSite), which(dataCols == sample)])
+    }
+}
+
+dataCols = colnames(lowdfi)
+dataRows = rownames(lowdfi)
+
+for (cgSite in Region1) {
+    for (sample in colnames(lowdfi)[-1]) {
+      PatID = c(PatID, sample)
+      BetaValue = append(BetaValue, lowdfi[which(dataRows == cgSite), which(dataCols == sample)])
+    }
+}
+
+BetaValue = unlist(BetaValue)
+
+Region2Data = tibble(BetaValue)
+Region2Data = mutate(Region2Data, PATIDfixed = PatID)
+
+data = merge(Region2Data, sementable, by = "PATIDfixed")
+
+ggplot(data, aes(x=dfi, y=BetaValue)) +
+  geom_point() +
+  theme_bw() +
+  labs(y = "Region 2 Beta Value")
+
+```
+
+```{r}
+#REGION 3
+PatID = c()
+BetaValue = c()
+
+dataCols = colnames(highdfi)
+dataRows = rownames(highdfi)
+
+for (cgSite in Region3) {
+    for (sample in colnames(highdfi)[-1]) {
+      PatID = c(PatID, sample)
+      BetaValue = append(BetaValue, highdfi[which(dataRows == cgSite), which(dataCols == sample)])
+    }
+}
+
+dataCols = colnames(lowdfi)
+dataRows = rownames(lowdfi)
+
+for (cgSite in Region3) {
+    for (sample in colnames(lowdfi)[-1]) {
+      PatID = c(PatID, sample)
+      BetaValue = append(BetaValue, lowdfi[which(dataRows == cgSite), which(dataCols == sample)])
+    }
+}
+
+BetaValue = unlist(BetaValue)
+
+Region3Data = tibble(BetaValue)
+Region3Data = mutate(Region3Data, PATIDfixed = PatID)
+
+data = merge(Region3Data, sementable, by = "PATIDfixed")
+
+ggplot(data, aes(x=dfi, y=BetaValue)) +
+  geom_point() +
+  theme_bw() +
+  labs(y = "Region 3 Beta Value")
+
+```
+
+```{r}
+#REGION 4
+PatID = c()
+BetaValue = c()
+
+dataCols = colnames(highdfi)
+dataRows = rownames(highdfi)
+
+for (cgSite in Region4) {
+    for (sample in colnames(highdfi)[-1]) {
+      PatID = c(PatID, sample)
+      BetaValue = append(BetaValue, highdfi[which(dataRows == cgSite), which(dataCols == sample)])
+    }
+}
+
+dataCols = colnames(lowdfi)
+dataRows = rownames(lowdfi)
+
+for (cgSite in Region4) {
+    for (sample in colnames(lowdfi)[-1]) {
+      PatID = c(PatID, sample)
+      BetaValue = append(BetaValue, lowdfi[which(dataRows == cgSite), which(dataCols == sample)])
+    }
+}
+
+BetaValue = unlist(BetaValue)
+
+Region4Data = tibble(BetaValue)
+Region4Data = mutate(Region4Data, PATIDfixed = PatID)
+
+data = merge(Region4Data, sementable, by = "PATIDfixed")
+
+ggplot(data, aes(x=dfi, y=BetaValue)) +
+  geom_point() +
+  theme_bw() +
+  labs(y = "Region 4 Beta Value")
+
+```
+
+```{r}
+#REGION 5
+PatID = c()
+BetaValue = c()
+
+dataCols = colnames(highdfi)
+dataRows = rownames(highdfi)
+
+for (cgSite in Region5) {
+    for (sample in colnames(highdfi)[-1]) {
+      PatID = c(PatID, sample)
+      BetaValue = append(BetaValue, highdfi[which(dataRows == cgSite), which(dataCols == sample)])
+    }
+}
+
+dataCols = colnames(lowdfi)
+dataRows = rownames(lowdfi)
+
+for (cgSite in Region5) {
+    for (sample in colnames(lowdfi)[-1]) {
+      PatID = c(PatID, sample)
+      BetaValue = append(BetaValue, lowdfi[which(dataRows == cgSite), which(dataCols == sample)])
+    }
+}
+
+BetaValue = unlist(BetaValue)
+
+Region5Data = tibble(BetaValue)
+Region5Data = mutate(Region5Data, PATIDfixed = PatID)
+
+data = merge(Region5Data, sementable, by = "PATIDfixed")
+
+ggplot(data, aes(x=dfi, y=BetaValue)) +
+  geom_point() +
+  theme_bw() +
+  labs(y = "Region 5 Beta Value")
+
+```
+
+```{r}
+#REGION 6
+PatID = c()
+BetaValue = c()
+
+dataCols = colnames(highdfi)
+dataRows = rownames(highdfi)
+
+for (cgSite in Region6) {
+    for (sample in colnames(highdfi)[-1]) {
+      PatID = c(PatID, sample)
+      BetaValue = append(BetaValue, highdfi[which(dataRows == cgSite), which(dataCols == sample)])
+    }
+}
+
+dataCols = colnames(lowdfi)
+dataRows = rownames(lowdfi)
+
+for (cgSite in Region6) {
+    for (sample in colnames(lowdfi)[-1]) {
+      PatID = c(PatID, sample)
+      BetaValue = append(BetaValue, lowdfi[which(dataRows == cgSite), which(dataCols == sample)])
+    }
+}
+
+BetaValue = unlist(BetaValue)
+
+Region6Data = tibble(BetaValue)
+Region6Data = mutate(Region6Data, PATIDfixed = PatID)
+
+data = merge(Region6Data, sementable, by = "PATIDfixed")
+
+ggplot(data, aes(x=dfi, y=BetaValue)) +
+  geom_point() +
+  theme_bw() +
+  labs(y = "Region 6 Beta Value")
+
+```
+
+Making Regressions of Variance
+
+```{r}
+library(tidyverse)
+highCometVariances = read_csv("/Users/haileyjohnson/Desktop/DNA_Damage_Project/CLEAN_ANALYSES/INSTABILITY/comet/HighComet_Instability_Results.csv")
+lowCometVariances = read_csv("/Users/haileyjohnson/Desktop/DNA_Damage_Project/CLEAN_ANALYSES/INSTABILITY/comet/LowComet_Instability_Results.csv")
+
+sementable = read_csv("/Users/haileyjohnson/Desktop/DNA_Damage_Project/DATA/sementable.csv")
+
+sementable = mutate(sementable, Sentrix_ID = PATIDfixed)
+
+high = merge(highCometVariances, sementable)
+low = merge(lowCometVariances, sementable)
+
+data = rbind(high, low)
+
+ggplot(data, aes(x=comet, y=Total_Variance)) +
+  geom_point() +
+  theme_bw()
+```
+
+```{r}
+highVariances = read_csv("/Users/haileyjohnson/Desktop/DNA_Damage_Project/CLEAN_ANALYSES/INSTABILITY/dfi/HighDFI_Instability_Results.csv")
+lowVariances = read_csv("/Users/haileyjohnson/Desktop/DNA_Damage_Project/CLEAN_ANALYSES/INSTABILITY/dfi/LowDFI_Instability_Results.csv")
+
+
+high = merge(highVariances, sementable)
+low = merge(lowVariances, sementable)
+
+data = rbind(high, low)
+
+ggplot(data, aes(x=dfi, y=Chaos_Score)) +
+  geom_point() +
+  theme_bw()
+```
+
+Lets compare the high and low groups
+
+```{r}
+library(tidyverse)
+highdfi = read_csv("/Users/haileyjohnson/Desktop/DNA_Damage_Project/DATA/cleanHighDFI.csv")
+library(data.table)
+lowdfi = fread("/Users/haileyjohnson/Desktop/DNA_Damage_Project/DATA/cleanLowDFI.csv")
+lowdfi = as_tibble(lowdfi)
+
+rownames(highdfi) = highdfi$...1
+rownames(lowdfi) = lowdfi$V1
+
+
+highcomet = read_csv("/Users/haileyjohnson/Desktop/DNA_Damage_Project/DATA/cleanHighComet.csv")
+lowcomet = fread("/Users/haileyjohnson/Desktop/DNA_Damage_Project/DATA/cleanLowComet.csv")
+lowcomet = as_tibble(lowcomet)
+rownames(highcomet) = highcomet$...1
+rownames(lowcomet) = lowcomet$V1
+
+highcomet = highcomet[-1]
+lowcomet = lowcomet[-1]
+highdfi = highdfi[-1]
+lowdfi = lowdfi[-1]
+
+high_comet_group = colnames(highcomet)
+high_dfi_group = colnames(highdfi)
+
+highcount = 0
+for (id in high_dfi_group) {
+  if (id %in% high_comet_group) {
+    highcount = highcount + 1
+  }
+}
+
+
+low_comet_group = colnames(lowcomet)
+low_dfi_group = colnames(lowdfi)
+
+lowcount = 0
+for (id in low_dfi_group) {
+  if (id %in% low_comet_group) {
+    lowcount = lowcount + 1
+  }
+}
+```
